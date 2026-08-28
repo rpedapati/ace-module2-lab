@@ -14,11 +14,23 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
+// @ts-expect-error FIXME due to non-existing type definitions for notevil
+import { eval as safeEval } from 'notevil'
 
 const entities = new Entities()
 
 function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
+}
+
+function isSafeExpression (code: string): boolean {
+  const blockedKeywords = [
+    'global', 'process', 'require', 'exec', 'spawn', 'child_process',
+    'constructor', 'prototype', '__proto__', 'eval', 'Function', 'import',
+    'mainModule', 'fs', 'os', 'path'
+  ]
+  const lowerCode = code.toLowerCase()
+  return !blockedKeywords.some(keyword => lowerCode.includes(keyword))
 }
 
 export function getUserProfile () {
@@ -55,10 +67,10 @@ export function getUserProfile () {
       req.app.locals.abused_ssti_bug = true
       const code = username?.substring(2, username.length - 1)
       try {
-        if (!code) {
-          throw new Error('Username is null')
+        if (!code || !isSafeExpression(code)) {
+          throw new Error('Unsafe or empty expression')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = safeEval(code)
       } catch (err) {
         username = '\\' + username
       }
